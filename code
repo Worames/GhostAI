@@ -1,0 +1,152 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityStandardAssets.Characters.FirstPerson;
+using UnityEngine.AI;
+using UnityEngine.SceneManagement;
+using System;
+
+
+public class GhostAI : MonoBehaviour
+{
+    public FirstPersonController fpsc;
+    public float FieldOfView = 120f;
+
+    public float wanderSpeed = 4f;//เลือกว่า เดินเล่นความเร็วเท่าไหร่ ไล่ ความเร็วเท่าไหร่
+    public float chaseSpeed = 7f;
+
+    public float viewDistance = 10f;
+    public float WanderRadius = 7f;//เราสามารถใส่ radius ในนี้ว่ามันจะ เดินเล่นได้ระยะเท่าไหร่ สามารถเช็คได้โดย sphere collider
+    public float losePlayerTime = 10f;
+    private bool isaware = false;
+    private bool isDetecting = false;//set timer on this
+    private Vector3 wanderPoint;
+    private NavMeshAgent agent;
+
+    private Animator animator;
+    private float loseTimer = 0;
+    
+
+
+
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if(other.tag == "Player")
+        {
+            isaware = true;
+        }
+    }
+
+    public void Start()
+    {
+        agent = GetComponent<NavMeshAgent>();
+        wanderPoint = RandomWandering();
+
+        animator = GetComponent<Animator>();
+    }
+    public void Update()
+    {
+
+        if (isaware)
+        {
+           
+            
+            //give direction where to chase player//
+            agent.SetDestination(fpsc.transform.position);
+            //chaseplayer
+            animator.SetBool("Aware", true);//เปลี่ยน parameter ของ animation ชื่อ "Aware เป็น true"
+            agent.speed = chaseSpeed;
+            if (!isDetecting)
+            {
+                loseTimer += Time.deltaTime;
+                if (loseTimer >= losePlayerTime)
+                {
+                    isaware = false;
+                    loseTimer = 0;
+                }
+            }
+        }
+        else
+        {
+            
+            Wander();
+            animator.SetBool("Aware", false);
+            agent.speed = wanderSpeed;
+        }
+        SearchForPlayer();//search need to be executed no matter if enemy is detecting player or not
+
+       
+    }
+
+    public void SearchForPlayer()
+    {
+        //localspace???//
+        //checking for line of sight angle//
+        //Vector3.forward is 0 in x axis , 0 in y axis , 1 in z axis//
+        //we compare angle to the firstpersoncontroller(fpsc)//
+        if (Vector3.Angle(Vector3.forward, transform.InverseTransformPoint(fpsc.transform.position)) < 80f)
+        {
+            if (Vector3.Distance(fpsc.transform.position, transform.position) < viewDistance)
+            {
+                RaycastHit hit;
+                // Raycast hit object(have to make it static) If it hit object, It can't move pass the object
+                //tranform = start , fpsc. = end , out = save
+                if (Physics.Linecast(transform.position, fpsc.transform.position, out hit, -1))
+                {
+                    if (hit.transform.CompareTag("Player"))
+                    {
+                        //detected//
+                        OnAware();
+                    }
+                    else
+                    {
+                        isDetecting = false;
+                    }
+
+                }
+                else
+                {
+                    isDetecting = false;
+                }
+
+            }
+            else
+            {
+                isDetecting = false;//make sure enemy is not aware
+            }
+        }
+        else
+        {
+            isDetecting = false;
+        }
+    }
+
+    public void OnAware()
+    {
+        isaware = true;
+        isDetecting = true;
+        loseTimer = 0;
+    }
+
+    public void Wander()
+    {
+        if (Vector3.Distance(transform.position, wanderPoint) < 1f)
+        {
+            wanderPoint = RandomWandering();
+        }
+        else
+        {
+            agent.SetDestination(wanderPoint);
+        }
+    }
+
+    public Vector3 RandomWandering()
+    {
+        
+        Vector3 randonPoint = (UnityEngine.Random.insideUnitSphere * WanderRadius) + transform.position;
+        NavMeshHit navhit;
+        NavMesh.SamplePosition(randonPoint , out navhit, WanderRadius, -1);
+        return new Vector3(navhit.position.x, transform.position.y, navhit.position.z);//no y coz it's gonna fly
+    }
+}
